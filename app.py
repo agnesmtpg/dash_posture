@@ -24,7 +24,7 @@ FIREBASE_SECRET = "i2cto2788r0G60TgzlAoTj1xGdB9OZpwzvjpQyLJ"
 POLL_INTERVAL = 1.0
 
 # Link dashboard yang dikirim ke Telegram (Streamlit default port 8501).
-DASHBOARD_URL = "http://192.168.1.10:8501"
+DASHBOARD_URL = "https://koreksiposture.streamlit.app/"
 
 DURASI_DUDUK = 18 * 60
 DURASI_ISTIRAHAT = 12 * 60
