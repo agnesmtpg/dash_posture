@@ -370,6 +370,8 @@ async def proses_state():
     if not online:
         return
 
+    usage_state["seconds"] += dt   # timer keseluruhan: jalan terus selama alat online
+
     dist = _to_float(sensor_data.get("distance")) if online else None
     if dist is None:
         dist_txt, dist_cls = "Tidak terhubung", "big-off"
@@ -439,7 +441,7 @@ async def proses_state():
     if sebelum is False:
         await kirim_notif("✅ Korset terdeteksi dipakai.")
 
-    if timer_state["phase"] == "duduk":
+    if timer_state["phase"] != "duduk" or korset_dipakai():
         usage_state["seconds"] += dt
 
     # --- Postur (hanya fase duduk) ---
@@ -673,7 +675,7 @@ def line_chart(title, legend, series, xdata, key):
     st_echarts(opt, height="340px", key=key)
 
 def render_tabel(rows):
-    headers = ['Waktu', 'Status Postur', 'Jarak', 'FSR 1 (Kanan)', 'FSR 2 (Kiri)', 'MPU 1 (Atas)', 'MPU 2 (Bawah)']
+    headers = ['Waktu', 'Status Postur', 'Jarak', 'FSR 1 (Kiri)', 'FSR 2 (Kanan)', 'MPU 1 (Atas)', 'MPU 2 (Bawah)']
     keys = ['waktu', 'postur', 'jarak', 'fsr1', 'fsr2', 'mpu1', 'mpu2']
     th = "".join(f"<th>{h}</th>" for h in headers)
     body = "".join("<tr>" + "".join(f"<td>{r[k]}</td>" for k in keys) + "</tr>" for r in rows)
@@ -820,9 +822,9 @@ def dashboard():
         with st.container(key="row_fsr"):
             f1, f2 = st.columns(2)
             with f1:
-                st.markdown(fsr_card("Pressure Kanan", fsr1_val), unsafe_allow_html=True)
+                st.markdown(fsr_card("Pressure Kiri", fsr1_val), unsafe_allow_html=True)
             with f2:
-                st.markdown(fsr_card("Pressure Kiri", fsr2_val), unsafe_allow_html=True)
+                st.markdown(fsr_card("Pressure Kanan", fsr2_val), unsafe_allow_html=True)
 
         # JARAK + COUNTDOWN + POSISI
         dist = _to_float(sensor_data.get("distance")) if online else None
@@ -900,8 +902,8 @@ def dashboard():
             g_a, g_b = st.columns(2)
             with g_a:
                 line_chart('Pressure (FSR)', ['Kanan', 'Kiri'], [
-                    {'name': 'Kanan', 'type': 'line', 'data': list(fsr1_buffer), 'smooth': True, 'color': '#7BAFD4'},
-                    {'name': 'Kiri', 'type': 'line', 'data': list(fsr2_buffer), 'smooth': True, 'color': '#FF8A80'},
+                    {'name': 'Kanan', 'type': 'line', 'data': list(fsr2_buffer), 'smooth': True, 'color': '#7BAFD4'},
+                    {'name': 'Kiri', 'type': 'line', 'data': list(fsr1_buffer), 'smooth': True, 'color': '#FF8A80'},
                 ], xdata, "chart_fsr")
             with g_b:
                 line_chart('Kurva (Z)', ['Atas', 'Bawah'], [
