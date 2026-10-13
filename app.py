@@ -32,7 +32,6 @@ BATT_LOW = 20
 BATT_CRIT = 10
 REMINDER_JAM_MULAI = 8
 REMINDER_JAM_AKHIR = 21
-FSR_THRESHOLD = 200
 TIMEZONE = "Asia/Makassar"  # WITA
 
 # ========================
@@ -304,13 +303,13 @@ def get_battery_icon(pct):
 # MONITOR GLOBAL
 # ========================
 def _mpu_z_dari(d):
-    """Sudut kemiringan (derajat) dari akselerasi MPU6050 (m/s²)."""
+    """Sudut kemiringan (derajat) dari sumbu Y (vertikal) MPU6050."""
     if not isinstance(d, dict):
         return None
     x, y, z = (_to_float(d.get(k)) for k in ("x", "y", "z"))
     if x is None or y is None or z is None:
         return None
-    return int(round(math.degrees(math.atan2(math.hypot(x, y), z))))
+    return int(round(math.degrees(math.atan2(math.hypot(x, z), y)))) -16
 
 
 def _mpu_z(key):
@@ -327,9 +326,8 @@ def fsr_val(key):
 
 def korset_dipakai():
     if timer_state["phase"] != "duduk":
-        return True  # fase peregangan: Arduino tidak membaca sensor
-    return any(v is not None and v > FSR_THRESHOLD
-                for v in (fsr_val("fsr1"), fsr_val("fsr2")))
+        return True  # fase peregangan: korset boleh dilonggarkan
+    return bool(sensor_data.get("korset", False))
 
 def _boleh_kirim(key, cooldown):
     now = time.time()
@@ -810,7 +808,8 @@ def dashboard():
                 status = "-"
             else:
                 angka = f'<div class="big" style="margin:8px 0">{v}</div>'
-                status = "Terpakai" if v > FSR_THRESHOLD else "Longgar"
+                th = _to_float(sensor_data.get("fsr_th"))
+                status = "Terpakai" if (th is not None and v > th) else "Longgar"
             return f"""
             <div class="card" style="background:#7BAFD4;text-align:center;color:black;margin-top:16px;min-height:130px">
                 <div class="lbl-sm">{label}</div>
