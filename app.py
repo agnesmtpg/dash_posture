@@ -38,7 +38,7 @@ TIMEZONE = "Asia/Makassar"  # WITA
 # ========================
 # KONFIGURASI TELEGRAM BOT
 # ========================
-TELEGRAM_TOKEN = "8849972300:AAGqaijQEthr5bTsY0W81EtXTLMk6LF4-ok"
+TELEGRAM_TOKEN = "8849972300:AAFvOzPZ3PjQBWV7mAMsMXfL5uIQAuXDu0E"
 
 SUBS_FILE = "telegram_subscribers.json"
 MAX_DATA_POINTS = 20
