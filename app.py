@@ -124,7 +124,7 @@ def ringkasan_status():
     fase = "Duduk" if timer_state["phase"] == "duduk" else "Peregangan"
     return (
         "📊 Status Spine Monitor\n"
-        f"Postur: {'Buruk (membungkuk)' if sensor_data.get('alarm') else 'Baik'}\n"
+        f"Postur: {'Buruk (membungkuk)' if sensor_data.get('alarm_bungkuk') else 'Baik'}\n"
         f"Posisi: {'Duduk' if sensor_data.get('duduk', True) else 'Berdiri'}\n"
         f"Baterai: {pct if pct is not None else '--'}%\n"
         f"Fase: {fase}, sisa {m:02d}:{s:02d}\n"
@@ -207,6 +207,15 @@ async def ambil_data_firebase():
 
 
 def ambil_history_firebase():
+    LABEL_STATUS = {
+    "aman": "Tegak",
+    "bungkuk": "Membungkuk",
+    "longgar": "Korset longgar",
+    "berdiri": "Berdiri",
+    "peregangan": "Peregangan",
+    "waktu_duduk_habis": "Waktu duduk habis",
+    "waktu_peregangan_habis": "Waktu peregangan habis",
+} 
     query_params = {"orderBy": '"$key"', "limitToLast": 30}
     history_data = _fetch_firebase_sync("history", query_params)
     rows = []
@@ -217,12 +226,16 @@ def ambil_history_firebase():
                 d = _to_float(val.get('distance'))
                 jarak = "Tidak terhubung" if d is None else "Tidak terdeteksi" if d == -1 else f"{d:.0f} cm"
 
-                m1 = _mpu_z_dari(val.get('mpu1'))
-                m2 = _mpu_z_dari(val.get('mpu2'))
+                m1 = _mpu_y_dari(val.get('mpu1'))
+                m2 = _mpu_y_dari(val.get('mpu2'))
                 f1 = _fsr_valid(val.get('fsr1'))
                 f2 = _fsr_valid(val.get('fsr2'))
 
-                if m1 is None and m2 is None:
+                status_raw = val.get('status')
+                
+                if status_raw:
+                    postur = LABEL_STATUS.get(status_raw, status_raw)
+                elif m1 is None and m2 is None:
                     postur = "Tidak terhubung"
                 else:
                     postur = 'Membungkuk' if val.get('alarm') else 'Tegak'
@@ -302,7 +315,7 @@ def get_battery_icon(pct):
 # ========================
 # MONITOR GLOBAL
 # ========================
-def _mpu_z_dari(d):
+def _mpu_y_dari(d):
     """Sudut kemiringan (derajat) dari sumbu Y (vertikal) MPU6050."""
     if not isinstance(d, dict):
         return None
@@ -313,7 +326,7 @@ def _mpu_z_dari(d):
 
 
 def _mpu_z(key):
-    return _mpu_z_dari(sensor_data.get(key))
+    return _mpu_y_dari(sensor_data.get(key))
 
 
 def _fsr_valid(v):
@@ -441,14 +454,11 @@ async def proses_state():
     if sebelum is False:
         await kirim_notif("✅ Korset terdeteksi dipakai.")
 
-    if timer_state["phase"] != "duduk" or korset_dipakai():
-        usage_state["seconds"] += dt
-
     # --- Postur (hanya fase duduk) ---
     if timer_state["phase"] != "duduk":
         return
 
-    alarm = bool(sensor_data.get("alarm", False))
+    alarm = bool(sensor_data.get("alarm_bungkuk", False))
     duduk = bool(sensor_data.get("duduk", True))
     mpu_ok = _mpu_z("mpu1") is not None or _mpu_z("mpu2") is not None
 
@@ -675,7 +685,7 @@ def line_chart(title, legend, series, xdata, key):
     st_echarts(opt, height="340px", key=key)
 
 def render_tabel(rows):
-    headers = ['Waktu', 'Status Postur', 'Jarak', 'FSR 1 (Kiri)', 'FSR 2 (Kanan)', 'MPU 1 (Atas)', 'MPU 2 (Bawah)']
+    headers = ['Waktu', 'Status Postur', 'Jarak', 'FSR 1 (Kanan)', 'FSR 2 (Kiri)', 'MPU 1 (Atas)', 'MPU 2 (Bawah)']
     keys = ['waktu', 'postur', 'jarak', 'fsr1', 'fsr2', 'mpu1', 'mpu2']
     th = "".join(f"<th>{h}</th>" for h in headers)
     body = "".join("<tr>" + "".join(f"<td>{r[k]}</td>" for k in keys) + "</tr>" for r in rows)
@@ -756,7 +766,7 @@ def dashboard():
         """, unsafe_allow_html=True)
 
         # STATUS POSTUR + GAUGE
-        alarm = sensor_data.get("alarm", False)
+        alarm = sensor_data.get("alarm_bungkuk", False)
         m1_z = _mpu_z("mpu1") if online else None
         m2_z = _mpu_z("mpu2") if online else None
 
@@ -822,9 +832,9 @@ def dashboard():
         with st.container(key="row_fsr"):
             f1, f2 = st.columns(2)
             with f1:
-                st.markdown(fsr_card("Pressure Kiri", fsr1_val), unsafe_allow_html=True)
+                st.markdown(fsr_card("Pressure Kanan", fsr1_val), unsafe_allow_html=True)
             with f2:
-                st.markdown(fsr_card("Pressure Kanan", fsr2_val), unsafe_allow_html=True)
+                st.markdown(fsr_card("Pressure Kiri", fsr2_val), unsafe_allow_html=True)
 
         # JARAK + COUNTDOWN + POSISI
         dist = _to_float(sensor_data.get("distance")) if online else None
@@ -902,8 +912,8 @@ def dashboard():
             g_a, g_b = st.columns(2)
             with g_a:
                 line_chart('Pressure (FSR)', ['Kanan', 'Kiri'], [
-                    {'name': 'Kanan', 'type': 'line', 'data': list(fsr2_buffer), 'smooth': True, 'color': '#7BAFD4'},
-                    {'name': 'Kiri', 'type': 'line', 'data': list(fsr1_buffer), 'smooth': True, 'color': '#FF8A80'},
+                    {'name': 'Kanan', 'type': 'line', 'data': list(fsr1_buffer), 'smooth': True, 'color': '#7BAFD4'},
+                    {'name': 'Kiri', 'type': 'line', 'data': list(fsr2_buffer), 'smooth': True, 'color': '#FF8A80'},
                 ], xdata, "chart_fsr")
             with g_b:
                 line_chart('Kurva (Z)', ['Atas', 'Bawah'], [
