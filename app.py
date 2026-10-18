@@ -802,7 +802,7 @@ def dashboard():
                 """, unsafe_allow_html=True)
             with c2:
                 with st.container(key="gauge_card"):
-                    st.markdown('<div style="font-size:14px;font-weight:700;text-align:center;color:black">Kurva (Z)</div>',
+                    st.markdown('<div style="font-size:14px;font-weight:700;text-align:center;color:black">Axis (Y)</div>',
                                 unsafe_allow_html=True)
                     g1, g2 = st.columns(2)
                     with g1:
