@@ -430,7 +430,7 @@ async def proses_state():
         if fase_lama is not None and fase_lama != fase_baru:
             if fase_baru == "istirahat":
                 _buat_event("self_improvement", "Waktunya Peregangan!",
-                            f"Kamu sudah duduk {DURASI_DUDUK // 60} menit. Longgarkan korset dan lakukan peregangan selama {DURASI_ISTIRAHAT // 60} menit.")
+                            f"Kamu sudah duduk {DURASI_DUDUK // 60} menit. Longgarkan atau lepas korset dan lakukan peregangan selama {DURASI_ISTIRAHAT // 60} menit.")
                 await kirim_notif(f"🧘 Waktunya peregangan! Kamu sudah duduk {DURASI_DUDUK // 60} menit.\n"
                                   f"Longgarkan korset dan lakukan peregangan selama {DURASI_ISTIRAHAT // 60} menit.")
             else:
