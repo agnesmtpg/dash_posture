@@ -716,7 +716,7 @@ def gauge(value, key):
             'axisLabel': {'show': False},
             'pointer': {'width': 4, 'length': '65%', 'itemStyle': {'color': '#3E5C76'}},
             'anchor': {'show': True, 'size': 8, 'itemStyle': {'color': '#3E5C76'}},
-            'detail': {'formatter': '{value}°', 'fontSize': 18, 'fontWeight': 'bold',
+            'detail': {'formatter': '{value}', 'fontSize': 18, 'fontWeight': 'bold',
             'color': '#000', 'offsetCenter': [0, '62%']},
             'data': [{'value': max(-90, min(90, value))}],
         }]
@@ -851,8 +851,7 @@ def dashboard():
             else:
                 with st.container(key=key_wrap):
                     gauge(z, key_gauge)
-                st.markdown(f'<div class="g-num">{z}°</div><div class="g-lbl">{nama}</div>',
-                            unsafe_allow_html=True)
+                st.markdown(f'<div class="g-num">{z}</div><div class="g-lbl">{nama}</div>',
 
         with st.container(key="status_card"):
             c1, c2 = st.columns([1, 1.4])
