@@ -273,8 +273,8 @@ def ambil_history_firebase():
                     'jarak': jarak,
                     'fsr1': f1 if f1 is not None else "Tidak terhubung",
                     'fsr2': f2 if f2 is not None else "Tidak terhubung",
-                    'mpu1': f"{m1}°" if m1 is not None else "Tidak terhubung",
-                    'mpu2': f"{m2}°" if m2 is not None else "Tidak terhubung",
+                    'mpu1': f"{m1}" if m1 is not None else "Tidak terhubung",
+                    'mpu2': f"{m2}" if m2 is not None else "Tidak terhubung",
                 })
         rows.reverse()
 
@@ -852,6 +852,7 @@ def dashboard():
                 with st.container(key=key_wrap):
                     gauge(z, key_gauge)
                 st.markdown(f'<div class="g-num">{z}</div><div class="g-lbl">{nama}</div>',
+                            unsafe_allow_html=True)
 
         with st.container(key="status_card"):
             c1, c2 = st.columns([1, 1.4])
