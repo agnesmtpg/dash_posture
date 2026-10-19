@@ -204,7 +204,8 @@ def _fetch_firebase_sync(node="latest", extra_params=None):
         r = requests.get(endpoint, params=params, timeout=5)
         r.raise_for_status()
         return r.json()
-    except Exception:
+    except Exception as e:
+        print(f"Firebase error ({node}): {e}")
         return None
 
 
