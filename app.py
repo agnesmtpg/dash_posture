@@ -26,8 +26,6 @@ POLL_INTERVAL = 1.0
 # Link dashboard yang dikirim ke Telegram (Streamlit default port 8501).
 DASHBOARD_URL = "https://koreksiposture.streamlit.app/"
 
-DEMO_DUDUK = 2 * 60
-DEMO_ISTIRAHAT = 30
 DURASI_DUDUK = 18 * 60
 DURASI_ISTIRAHAT = 12 * 60
 BATT_LOW = 20
@@ -61,7 +59,6 @@ def _load_subs():
 @st.cache_resource
 def get_shared():
     return {
-        "demo_state": {"aktif": False},
         "timer_state": {"seconds": DURASI_DUDUK, "phase": "duduk"},
         "usage_state": {"seconds": 0},
         "event_state": {"id": 0, "icon": "", "title": "", "msg": ""},
@@ -98,30 +95,7 @@ mpu2_buffer = S["mpu2_buffer"]
 dist_buffer = S["dist_buffer"]
 subscribers = S["subscribers"]
 telegram_app = S["telegram_app"]
-demo_state = S["demo_state"]
 
-
-def durasi_duduk():
-    return DEMO_DUDUK if demo_state["aktif"] else DURASI_DUDUK
-
-
-def durasi_istirahat():
-    return DEMO_ISTIRAHAT if demo_state["aktif"] else DURASI_ISTIRAHAT
-
-
-def set_demo_mode(aktif):
-    demo_state["aktif"] = aktif
-    timer_state["phase"] = "duduk"
-    timer_state["seconds"] = durasi_duduk()
-    notif_state["fase_fw"] = None
-    notif_state["waktu_lalu"] = None
-    # Kabari alat lewat Firebase (opsional, dibaca firmware kalau sudah disiapkan)
-    try:
-        params = {"auth": FIREBASE_SECRET} if FIREBASE_SECRET else {}
-        requests.put(f"{FIREBASE_URL}/spine_monitor/config/demo.json",
-                    params=params, json=bool(aktif), timeout=5)
-    except Exception as e:
-        print(f"Gagal set demo di Firebase: {e}")
 
 # ========================
 # HANDLER TELEGRAM BOT
@@ -204,8 +178,7 @@ def _fetch_firebase_sync(node="latest", extra_params=None):
         r = requests.get(endpoint, params=params, timeout=5)
         r.raise_for_status()
         return r.json()
-    except Exception as e:
-        print(f"Firebase error ({node}): {e}")
+    except Exception:
         return None
 
 
@@ -274,8 +247,8 @@ def ambil_history_firebase():
                     'jarak': jarak,
                     'fsr1': f1 if f1 is not None else "Tidak terhubung",
                     'fsr2': f2 if f2 is not None else "Tidak terhubung",
-                    'mpu1': f"{m1}" if m1 is not None else "Tidak terhubung",
-                    'mpu2': f"{m2}" if m2 is not None else "Tidak terhubung",
+                    'mpu1': f"{m1}°" if m1 is not None else "Tidak terhubung",
+                    'mpu2': f"{m2}°" if m2 is not None else "Tidak terhubung",
                 })
         rows.reverse()
 
@@ -384,19 +357,6 @@ def _reset_kirim(key):
 def _buat_event(icon, title, msg):
     event_state.update(id=event_state["id"] + 1, icon=icon, title=title, msg=msg)
 
-async def _notif_ganti_fase(fase_baru):
-    if fase_baru == "istirahat":
-        if demo_state["aktif"]:
-            msg = "Mode demo: longgarkan korset dan peregangan selama 30 detik."
-        else:
-            msg = (f"Kamu sudah duduk {DURASI_DUDUK // 60} menit. Longgarkan atau lepas korset "
-                   f"dan lakukan peregangan selama {DURASI_ISTIRAHAT // 60} menit.")
-        _buat_event("self_improvement", "Waktunya Peregangan!", msg)
-        await kirim_notif(f"🧘 Waktunya peregangan!\n{msg}")
-    else:
-        _buat_event("event_seat", "Peregangan Selesai",
-                    "Waktu peregangan selesai, silakan duduk kembali.")
-        await kirim_notif("✅ Waktu peregangan selesai, silakan duduk kembali.")
 
 async def proses_state():
     tick = time.monotonic()
@@ -451,37 +411,32 @@ async def proses_state():
             else:
                 await kirim_notif(f"🔋 Baterai tinggal {pct}%. Siapkan charger.")
 
-    # --- Timer & fase ---
-    if demo_state["aktif"]:
-        # Mode demo: timer dihitung sendiri di sini, abaikan timer Arduino
-        timer_state["seconds"] = max(0, timer_state["seconds"] - dt)
-        if timer_state["seconds"] <= 0:
-            if timer_state["phase"] == "duduk":
-                timer_state["phase"] = "istirahat"
-                timer_state["seconds"] = DEMO_ISTIRAHAT
-                await _notif_ganti_fase("istirahat")
-            else:
-                timer_state["phase"] = "duduk"
-                timer_state["seconds"] = DEMO_DUDUK
-                await _notif_ganti_fase("duduk")
-    else:
-        fase_fw = sensor_data.get("fase")
-        sisa_fw = _to_float(sensor_data.get("sisa"))
-        if fase_fw in ("duduk", "peregangan") and sisa_fw is not None:
-            fase_baru = "duduk" if fase_fw == "duduk" else "istirahat"
-            fase_lama = notif_state.get("fase_fw")
-            data_baru = sensor_data.get("waktu") != notif_state.get("waktu_lalu")
-            notif_state["waktu_lalu"] = sensor_data.get("waktu")
+    # --- Sinkron timer & fase dari Arduino ---
+    fase_fw = sensor_data.get("fase")
+    sisa_fw = _to_float(sensor_data.get("sisa"))
+    if fase_fw in ("duduk", "peregangan") and sisa_fw is not None:
+        fase_baru = "duduk" if fase_fw == "duduk" else "istirahat"
+        fase_lama = notif_state.get("fase_fw")
+        data_baru = sensor_data.get("waktu") != notif_state.get("waktu_lalu")
+        notif_state["waktu_lalu"] = sensor_data.get("waktu")
 
-            timer_state["phase"] = fase_baru
-            if data_baru:
-                timer_state["seconds"] = sisa_fw
-            else:
-                timer_state["seconds"] = max(0, timer_state["seconds"] - dt)
-            notif_state["fase_fw"] = fase_baru
+        timer_state["phase"] = fase_baru
+        if data_baru:
+            timer_state["seconds"] = sisa_fw
+        else:
+            timer_state["seconds"] = max(0, timer_state["seconds"] - dt)
+        notif_state["fase_fw"] = fase_baru
 
-            if fase_lama is not None and fase_lama != fase_baru:
-                await _notif_ganti_fase(fase_baru)
+        if fase_lama is not None and fase_lama != fase_baru:
+            if fase_baru == "istirahat":
+                _buat_event("self_improvement", "Waktunya Peregangan!",
+                            f"Kamu sudah duduk {DURASI_DUDUK // 60} menit. Longgarkan atau lepas korset dan lakukan peregangan selama {DURASI_ISTIRAHAT // 60} menit.")
+                await kirim_notif(f"🧘 Waktunya peregangan! Kamu sudah duduk {DURASI_DUDUK // 60} menit.\n"
+                                  f"Longgarkan korset dan lakukan peregangan selama {DURASI_ISTIRAHAT // 60} menit.")
+            else:
+                _buat_event("event_seat", "Peregangan Selesai",
+                            "Waktu peregangan selesai, silakan duduk kembali.")
+                await kirim_notif("✅ Waktu peregangan selesai, silakan duduk kembali.")
 
     # --- Korset dipakai? ---
     dipakai = korset_dipakai()
@@ -591,10 +546,6 @@ start_backend()
 # ========================
 st.markdown("""
 <style>
-.st-key-btn_demo button {
-    background:#3E5C76; color:#fff; border:none; border-radius:6px;
-    padding:4px 24px; white-space:nowrap;
-}
 .stApp { background-color: #F7F6F1; font-family: sans-serif; color: #000; }
 header[data-testid="stHeader"] { display: none; }
 .block-container { max-width: 1400px; padding: 1rem 2rem; }
@@ -613,9 +564,6 @@ header[data-testid="stHeader"] { display: none; }
     .st-key-gw_atas, .st-key-gw_bawah { display:none !important; }
     .g-num { display:block; }
 }
-        st.session_state.demo_toggle = demo_state["aktif"]
-        st.toggle("Mode demo (duduk 2 menit, peregangan 30 detik)", key="demo_toggle",
-                on_change=lambda: set_demo_mode(st.session_state.demo_toggle))
 .st-key-btn_bot a { background:#7BAFD4 !important; color:#fff !important; font-weight:700; border-radius:6px; border:none; }
 
 /* Popup: kartu di tengah layar dengan lebar tetap */
@@ -717,7 +665,7 @@ def gauge(value, key):
             'axisLabel': {'show': False},
             'pointer': {'width': 4, 'length': '65%', 'itemStyle': {'color': '#3E5C76'}},
             'anchor': {'show': True, 'size': 8, 'itemStyle': {'color': '#3E5C76'}},
-            'detail': {'formatter': '{value}', 'fontSize': 18, 'fontWeight': 'bold',
+            'detail': {'formatter': '{value}°', 'fontSize': 18, 'fontWeight': 'bold',
             'color': '#000', 'offsetCenter': [0, '62%']},
             'data': [{'value': max(-90, min(90, value))}],
         }]
@@ -781,16 +729,6 @@ def dashboard():
                 st.session_state.seen_event = event_state["id"]
                 st.rerun(scope="fragment")
 
-    # TOMBOL MODE DEMO
-    def _toggle_demo():
-        set_demo_mode(not demo_state["aktif"])
-
-    if demo_state["aktif"]:
-        st.button("⏹ Matikan Mode Demo", key="btn_demo", on_click=_toggle_demo)
-        st.caption("🧪 Mode demo aktif: duduk 2 menit, peregangan 30 detik.")
-    else:
-        st.button("▶ Aktifkan Mode Demo", key="btn_demo", on_click=_toggle_demo)
-
     col_kiri, col_kanan = st.columns(2, gap="large")
 
     # ================= KOLOM KIRI =================
@@ -852,7 +790,7 @@ def dashboard():
             else:
                 with st.container(key=key_wrap):
                     gauge(z, key_gauge)
-                st.markdown(f'<div class="g-num">{z}</div><div class="g-lbl">{nama}</div>',
+                st.markdown(f'<div class="g-num">{z}°</div><div class="g-lbl">{nama}</div>',
                             unsafe_allow_html=True)
 
         with st.container(key="status_card"):
