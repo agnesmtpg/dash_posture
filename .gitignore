@@ -1,2 +1,3 @@
 serviceAccountKey.json
 telegram_subscribers.json
+.streamlit/secrets.toml

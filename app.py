@@ -19,8 +19,8 @@ st.set_page_config(page_title="Spine Monitor Dashboard", layout="wide")
 # ========================
 # KONFIGURASI FIREBASE
 # ========================
-FIREBASE_URL = "https://posture-4fe84-default-rtdb.firebaseio.com"
-FIREBASE_SECRET = "i2cto2788r0G60TgzlAoTj1xGdB9OZpwzvjpQyLJ"
+FIREBASE_URL = st.secrets["FIREBASE_URL"]
+FIREBASE_SECRET = st.secrets["FIREBASE_SECRET"]
 POLL_INTERVAL = 1.0
 
 # Link dashboard yang dikirim ke Telegram (Streamlit default port 8501).
@@ -37,7 +37,8 @@ TIMEZONE = "Asia/Makassar"  # WITA
 # ========================
 # KONFIGURASI TELEGRAM BOT
 # ========================
-TELEGRAM_TOKEN = "8849972300:AAFvOzPZ3PjQBWV7mAMsMXfL5uIQAuXDu0E"
+
+TELEGRAM_TOKEN = st.secrets["TELEGRAM_TOKEN"]
 
 SUBS_FILE = "telegram_subscribers.json"
 MAX_DATA_POINTS = 20
