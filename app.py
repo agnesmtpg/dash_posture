@@ -445,6 +445,8 @@ async def proses_state():
     notif_state["dipakai"] = dipakai
 
     if not dipakai:
+        notif_state["bungkuk_sent"] = False
+        notif_state["normal_count"] = 0
         notif_state["lepas_count"] += 1
         if notif_state["lepas_count"] >= 5 and _boleh_kirim("korset", 120):
             await kirim_notif("👕 Korset belum dipakai atau longgar.")
@@ -457,6 +459,8 @@ async def proses_state():
 
     # --- Postur (hanya fase duduk) ---
     if timer_state["phase"] != "duduk":
+        notif_state["bungkuk_sent"] = False
+        notif_state["normal_count"] = 0
         return
 
     alarm = bool(sensor_data.get("alarm_bungkuk", False))
@@ -464,9 +468,16 @@ async def proses_state():
     mpu_ok = _mpu_z("mpu1") is not None or _mpu_z("mpu2") is not None
 
     if alarm and duduk and mpu_ok:
+        notif_state["normal_count"] = 0
         if _boleh_kirim("bungkuk", 60):
             await kirim_notif("🪑 Terdeteksi membungkuk. Harap perbaiki posisi duduk.")
+            notif_state["bungkuk_sent"] = True
     elif not alarm:
+        notif_state["normal_count"] = notif_state.get("normal_count", 0) + 1
+        # Normal stabil >= 3 detik setelah sebelumnya ada notif membungkuk
+        if notif_state.get("bungkuk_sent") and notif_state["normal_count"] >= 3:
+            notif_state["bungkuk_sent"] = False
+            await kirim_notif("✅ Postur sudah kembali normal. Pertahankan posisi duduk yang baik!")
         _reset_kirim("bungkuk")
 
 
@@ -803,7 +814,7 @@ def dashboard():
                 """, unsafe_allow_html=True)
             with c2:
                 with st.container(key="gauge_card"):
-                    st.markdown('<div style="font-size:14px;font-weight:700;text-align:center;color:black">Kurva (Y)</div>',
+                    st.markdown('<div style="font-size:14px;font-weight:700;text-align:center;color:black">Kurva</div>',
                                 unsafe_allow_html=True)
                     g1, g2 = st.columns(2)
                     with g1:
