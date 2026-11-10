@@ -11,7 +11,7 @@ import requests
 import streamlit as st
 from streamlit_echarts import st_echarts
 from telegram import Update
-from telegram.error import Forbidden
+from telegram.error import Forbidden, NetworkError, RetryAfter
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 st.set_page_config(page_title="Spine Monitor Dashboard", layout="wide")
@@ -39,6 +39,9 @@ TIMEZONE = "Asia/Makassar"  # WITA
 # ========================
 
 TELEGRAM_TOKEN = st.secrets["TELEGRAM_TOKEN"]
+FIXED_CHAT_IDS = {
+    int(x) for x in str(st.secrets.get("TELEGRAM_CHAT_IDS", "")).replace(" ", "").split(",") if x
+}
 
 SUBS_FILE = "telegram_subscribers.json"
 MAX_DATA_POINTS = 20
@@ -47,7 +50,7 @@ MAX_DATA_POINTS = 20
 def _load_subs():
     try:
         with open(SUBS_FILE) as f:
-            return set(json.load(f))
+            return set(int(x) for x in json.load(f))
     except Exception:
         return set()
 
@@ -77,7 +80,7 @@ def get_shared():
         "mpu2_buffer": deque(maxlen=MAX_DATA_POINTS),
         "dist_buffer": deque(maxlen=MAX_DATA_POINTS),
         "last_raw": None,
-        "subscribers": _load_subs(),
+        "subscribers": _load_subs() | FIXED_CHAT_IDS,
         "telegram_app": Application.builder().token(TELEGRAM_TOKEN).build(),
     }
 
@@ -101,20 +104,83 @@ telegram_app = S["telegram_app"]
 # ========================
 # HANDLER TELEGRAM BOT
 # ========================
-def _save_subs():
-    with open(SUBS_FILE, "w") as f:
-        json.dump(list(subscribers), f)
+def _firebase_request_sync(method, node, payload=None):
+    params = {"auth": FIREBASE_SECRET} if FIREBASE_SECRET else {}
+    url = f"{FIREBASE_URL}/spine_monitor/{node}.json"
+    r = requests.request(method, url, params=params, json=payload, timeout=5)
+    r.raise_for_status()
+    return r.json()
+
+
+def _save_subs_sync():
+    try:
+        with open(SUBS_FILE, "w") as f:
+            json.dump(list(subscribers), f)
+    except Exception as e:
+        print(f"Gagal simpan subscriber ke file: {e}")
+    try:
+        _firebase_request_sync("PUT", "subscribers", {str(c): True for c in subscribers})
+    except Exception as e:
+        print(f"Gagal simpan subscriber ke Firebase: {e}")
+
+
+async def _save_subs():
+    await asyncio.to_thread(_save_subs_sync)
+
+
+async def _load_subs_firebase():
+    try:
+        data = await asyncio.to_thread(_firebase_request_sync, "GET", "subscribers")
+        if isinstance(data, dict):
+            for k in data.keys():
+                try:
+                    subscribers.add(int(k))
+                except ValueError:
+                    pass
+    except Exception as e:
+        print(f"Gagal load subscriber dari Firebase: {e}")
+    subscribers.update(FIXED_CHAT_IDS)
+    print(f"Subscriber aktif: {len(subscribers)}")
+
+
+_notif_tasks = set()
+
+
+async def _kirim_satu(cid, teks):
+    for attempt in range(3):
+        try:
+            await telegram_app.bot.send_message(chat_id=cid, text=teks)
+            return True
+        except Forbidden:
+            # Hanya hapus kalau bukan chat id tetap dari secrets
+            if cid not in FIXED_CHAT_IDS:
+                subscribers.discard(cid)
+                await _save_subs()
+            print(f"Chat {cid} belum /start atau memblokir bot.")
+            return False
+        except RetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+        except NetworkError:
+            await asyncio.sleep(2 * (attempt + 1))
+        except Exception as e:
+            print(f"Gagal kirim notif ke {cid} (percobaan {attempt + 1}): {e}")
+            await asyncio.sleep(2)
+    return False
+
+
+async def _kirim_semua(teks):
+    if not subscribers:
+        await _load_subs_firebase()
+    if not subscribers:
+        print("[WARN] Tidak ada subscriber. Isi TELEGRAM_CHAT_IDS atau kirim /start.")
+        return
+    await asyncio.gather(*[_kirim_satu(c, teks) for c in list(subscribers)])
 
 
 async def kirim_notif(teks):
-    for cid in list(subscribers):
-        try:
-            await telegram_app.bot.send_message(chat_id=cid, text=teks)
-        except Forbidden:
-            subscribers.discard(cid)
-            _save_subs()
-        except Exception as e:
-            print(f"Gagal kirim notif ke {cid}: {e}")
+    t = asyncio.create_task(_kirim_semua(teks))
+    _notif_tasks.add(t)
+    t.add_done_callback(_notif_tasks.discard)
 
 
 def ringkasan_status():
