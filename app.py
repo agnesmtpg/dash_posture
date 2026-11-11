@@ -880,7 +880,7 @@ def dashboard():
                 """, unsafe_allow_html=True)
             with c2:
                 with st.container(key="gauge_card"):
-                    st.markdown('<div style="font-size:14px;font-weight:700;text-align:center;color:black">Kurva</div>',
+                    st.markdown('<div style="font-size:14px;font-weight:700;text-align:center;color:black">Sudut</div>',
                                 unsafe_allow_html=True)
                     g1, g2 = st.columns(2)
                     with g1:
@@ -994,7 +994,7 @@ def dashboard():
                     {'name': 'Kiri', 'type': 'line', 'data': list(fsr2_buffer), 'smooth': True, 'color': '#FF8A80'},
                 ], xdata, "chart_fsr")
             with g_b:
-                line_chart('Kurva (Y)', ['Atas', 'Bawah'], [
+                line_chart('Sudut', ['Atas', 'Bawah'], [
                     {'name': 'Atas', 'type': 'line', 'data': list(mpu1_buffer), 'smooth': True, 'color': '#9ACDFF'},
                     {'name': 'Bawah', 'type': 'line', 'data': list(mpu2_buffer), 'smooth': True, 'color': '#FFD54F'},
                 ], xdata, "chart_mpu")
